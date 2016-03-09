@@ -465,7 +465,7 @@ sap.designstudio.sdk.Component.subclass("com.sap.sample.scngauge.SCNGauge", func
 		}
 	};
 
-	me.needleBaseRadius = function(value) {
+	me.needleBaseWidth = function(value) {
 		if (value === undefined) {
 			return me._needleBaseWidth;
 		} else {
@@ -564,35 +564,33 @@ sap.designstudio.sdk.Component.subclass("com.sap.sample.scngauge.SCNGauge", func
 		var vis = d3.select(myDiv).append("svg:svg").attr("width", "100%").attr("height", "100%");
 		var pi = Math.PI;
 		
+		// Find the larger left/right padding
+		var lrPadding = me._paddingLeft + me._paddingRight;
+		var tbPadding = me._paddingTop + me._paddingBottom;
+		var maxPadding = lrPadding;
+		if (maxPadding < tbPadding){
+			maxPadding = tbPadding
+		}			
+		
+		//Determine the smallest of the x and y axes.
+		var smallAxis = me.$().width();
+		if (smallAxis > me.$().height()) {
+			smallAxis = me.$().height();
+			
+		}
+		
+		me._outerRad = (smallAxis - 2*(maxPadding))/2;
+		
+		//Don't let the innerRad be greater than outer rad
+		if (me._outerRad <= me._innerRad){
+			alert("Warning!  The gauge arc can't have a negative radius!  Please decrease the inner radius, or increase the size of the control.  Height & width (including subtraction for padding) must me at least twice as large as Internal Radius!");
+		} 
+		
+		//The offset will determine where the center of the arc shall be
+		me._offsetLeft = me._outerRad + me._paddingLeft;
+		me._offsetDown = me._outerRad + me._paddingTop;
+
 		if (me._enableArc == true){
-			
-			
-			// Find the larger left/right padding
-			var lrPadding = me._paddingLeft + me._paddingRight;
-			var tbPadding = me._paddingTop + me._paddingBottom;
-			var maxPadding = lrPadding;
-			if (maxPadding < tbPadding){
-				maxPadding = tbPadding
-			}			
-			
-			//Determine the smallest of the x and y axes.
-			var smallAxis = me.$().width();
-			if (smallAxis > me.$().height()) {
-				smallAxis = me.$().height();
-				
-			}
-			
-			me._outerRad = (smallAxis - 2*(maxPadding))/2;
-			
-			//Don't let the innerRad be greater than outer rad
-			if (me._outerRad <= me._innerRad){
-				alert("Warning!  The gauge arc can't have a negative radius!  Please decrease the inner radius, or increase the size of the control.  Height & width (including subtraction for padding) must me at least twice as large as Internal Radius!");
-			} 
-			
-			//The offset will determine where the center of the arc shall be
-			me._offsetLeft = me._outerRad + me._paddingLeft;
-			me._offsetDown = me._outerRad + me._paddingTop;
-			
 			var arcDef = d3.svg.arc()
 				.innerRadius(me._innerRad)
 				.outerRadius(me._outerRad);
@@ -740,18 +738,20 @@ sap.designstudio.sdk.Component.subclass("com.sap.sample.scngauge.SCNGauge", func
 				alert("End angle of outer ring may not be less than start angle!");
 			}
 
-			//Transform the pin ring
+			//Transfomation for the Pin Ring
+			// We won't apply it just yet
+			var nbpTransformedStartAngle = needleBaseStartAngle + me._startAngleDeg;
+			var nbpTransformedEndAngle = needleBaseEndAngle + me._startAngleDeg;
+			
 			var nbTransformedStartAngle = needleBaseStartAngle + me._endAngleDeg;
 			var nbTransformedEndAngle = needleBaseEndAngle + me._endAngleDeg;
 
 			var pinArcDefinition = d3.svg.arc()
 				.innerRadius(needleIBasennerRadius)
-				.outerRadius(needleBaseOuterRadius)
-				.startAngle(nbTransformedStartAngle * (pi/180)) //converting from degs to radians
-				.endAngle(nbTransformedEndAngle * (pi/180)) //converting from degs to radians
+				.outerRadius(needleBaseOuterRadius);
 
-			var pinArc = vis
-				.append("path")
+			var pinArc = vis.append("path")
+				.datum({endAngle: nbpTransformedEndAngle * (pi/180), startAngle: nbpTransformedStartAngle * (pi/180)})
 				.attr("d", pinArcDefinition)
 				.attr("fill", me._needleColorCode)
 				.attr("transform", "translate(" + me._offsetLeft + "," + me._offsetDown + ")");	
@@ -765,23 +765,43 @@ sap.designstudio.sdk.Component.subclass("com.sap.sample.scngauge.SCNGauge", func
 		// Function adapted from this example
 		// Creates a tween on the specified transition's "d" attribute, transitioning
 		// any selected arcs from their current angle to the specified new angle.
-
-		guageArc.transition()
-			.duration(tempAnimationDuration)
-	      	.attrTween("d", function(d) {
-			    var interpolate = d3.interpolate(me._startAngleDeg * (pi/180), d.endAngle);
-			    return function(t) {
-			    	d.endAngle = interpolate(t);
-					return arcDef(d);
-				};
-			});
+		if (me._enableArc == true){
+			guageArc.transition()
+				.duration(tempAnimationDuration)
+				.delay(tempAnimationDelay)
+				.ease(me._animationEase)
+		      	.attrTween("d", function(d) {
+				    var interpolate = d3.interpolate(me._startAngleDeg * (pi/180), d.endAngle);
+				    return function(t) {
+				    	d.endAngle = interpolate(t);
+						return arcDef(d);
+					};
+				});
+		}
 
 		//Arcs are in radians, but rotation transformations are in degrees.  Kudos to D3 for consistency
-		needle.transition()
-			.attr("transform", "rotate(" + me._endAngleDeg + ")")
-			.duration(tempAnimationDuration)
-			.delay(tempAnimationDelay)
-			.ease(me._animationEase);
+		if (me._enableIndicatorNeedle == true){
+			needle.transition()
+				.attr("transform", "rotate(" + me._endAngleDeg + ")")
+				.duration(tempAnimationDuration)
+				.delay(tempAnimationDelay)
+				.ease(me._animationEase);
+		}
+		if (me._enableIndicatorNeedleBase == true){
+			pinArc.transition()
+				.duration(tempAnimationDuration)
+				.delay(tempAnimationDelay)
+		      	.attrTween("d", function(d) {
+				    var interpolateEnd = d3.interpolate(nbpTransformedEndAngle * (pi/180), nbTransformedEndAngle * (pi/180));
+				    var interpolateStart = d3.interpolate(nbpTransformedStartAngle * (pi/180), nbTransformedStartAngle * (pi/180));
+				    return function(t) {
+				    	d.endAngle = interpolateEnd(t);
+				    	d.startAngle = interpolateStart(t);
+						return pinArcDefinition(d);
+					};
+				});		
+			
+		}
 	
 	};
 	
